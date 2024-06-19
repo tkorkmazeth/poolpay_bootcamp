@@ -91,4 +91,93 @@ contract PayPool is ReentrancyGuard {
     }
 
     /* INTERNAL FUNCS */
+
+    /* STATE CHANGER FUNCS */
+
+    function addDepositAddress(address depositor) external isOwner {
+        depositAddresses.push(depositor);
+        emit AddressAdded(depositor);
+    }
+
+    function removeDepositAddress(
+        uint index
+    ) external isOwner canDepositTokens(depositAddresses[index]) {
+        address removedAddress = depositAddresses[index];
+        depositAddresses[index] = depositAddresses[depositAddresses.length - 1];
+        depositAddresses.pop();
+        emit AddressRemoved(removedAddress);
+    }
+
+    function deposit() external payable canDepositTokens(msg.sender) {
+        totalBalance += msg.value;
+
+        DepositRecord memory newRecord = DepositRecord({
+            depositor: msg.sender,
+            amount: msg.value,
+            timestamp: block.timestamp,
+            status: DepositStatus.Pending
+        });
+
+        depositHistory.push(newRecord);
+        emit Deposit(msg.sender, msg.value);
+    }
+
+    function approveDeposit(uint256 index) external isOwner {
+        require(index < depositHistory.length, "Invalid index");
+        depositHistory[index].status = DepositStatus.Approved;
+        emit DepositStatusUpdated(index, DepositStatus.Approved);
+    }
+
+    function rejectDeposit(uint256 index) external isOwner {
+        require(index < depositHistory.length, "Invalid index");
+        depositHistory[index].status = DepositStatus.Rejected;
+        emit DepositStatusUpdated(index, DepositStatus.Rejected);
+    }
+
+    function giveAllowance(uint amount, address user) external isOwner {
+        require(
+            totalBalance >= amount,
+            "Not enough tokens inside the pool to give allowance"
+        );
+        allowances[user] = amount;
+        unchecked {
+            totalBalance -= amount;
+        }
+        emit AllowanceGranted(user, amount);
+    }
+
+    function allowRetrieval() external gotAllowance(msg.sender) nonReentrant {
+        uint amount = allowances[msg.sender];
+        (bool success, ) = msg.sender.call{value: amount}("");
+        require(success, "Retrieval failed");
+        allowances[msg.sender] = 0;
+        emit FundsRetrieved(msg.sender, amount);
+    }
+
+    function removeAllowance(address user) external isOwner gotAllowance(user) {
+        allowances[user] = 0;
+        emit AllowanceRemoved(user);
+    }
+
+    /* STATE CHANGER FUNCS */
+
+    /* READ ONLY FUNCS */
+
+    function getDepositHistory()
+        external
+        view
+        returns (DepositRecord[] memory)
+    {
+        return depositHistory;
+    }
+
+    function retrieveBalance() external isOwner nonReentrant {
+        uint balance = totalBalance;
+        (bool success, ) = owner.call{value: balance}("");
+        require(success, "Transfer failed");
+        totalBalance = 0;
+        emit FundsRetrieved(owner, balance);
+    }
+
+    /* READ ONLY FUNCS */
 }
