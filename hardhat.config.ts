@@ -20,7 +20,7 @@ const config: HardhatUserConfig = {
   networks: {
     mumbai: {
       chainId: 534351,
-      accounts: [],
+      accounts: [PRIVATE_KEY],
       url: "https://sepolia-rpc.scroll.io",
     },
   },

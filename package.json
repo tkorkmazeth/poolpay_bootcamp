@@ -10,9 +10,13 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "hardhat": "^2.22.5"
+    "hardhat": "^2.22.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
   },
   "dependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.0.2",
     "dotenv": "^16.4.5"
   }
 }
