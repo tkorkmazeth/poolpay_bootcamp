@@ -2,29 +2,15 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "./helpers/Errors.sol";
+import "./helpers/Events.sol";
+import "./helpers/Struct.sol";
+import "./helpers/Modifiers.sol";
 
 // Uncomment this line to use console.log
 // import "hardhat/console.sol";
 
-contract PayPool is ReentrancyGuard {
-    /* START OF STRUCTS */
-
-    // Struct for Depositing Records
-    struct DepositRecord {
-        address depositor;
-        uint256 amount;
-        uint256 timestamp;
-        DepositStatus status;
-    }
-
-    /* END OF STRUCTS */
-
-    enum DepositStatus {
-        Pending,
-        Approved,
-        Rejected
-    }
-
+contract PayPool is ReentrancyGuard, Events, Errors, Structs {
     /* GLB VARS */
 
     uint public totalBalance;
@@ -34,41 +20,32 @@ contract PayPool is ReentrancyGuard {
 
     mapping(address => uint256) public allowances;
 
-    /* GLB VARS */
-
-    /* START OF EVENTS */
-
-    event Deposit(address indexed depositor, uint256 amount);
-    event AddressAdded(address indexed depositor);
-    event AddressRemoved(address indexed depositor);
-    event AllowanceGranted(address indexed user, uint amount);
-    event AllowanceRemoved(address indexed user);
-    event FundsRetrieved(address indexed recipient, uint amount);
-    event DepositStatusUpdated(uint256 index, DepositStatus status);
-
-    /* END OF EVENTS */
-
     /* START OF MODIFIERS */
 
     modifier isOwner() {
-        require(msg.sender == owner, "Not owner!");
+        if (msg.sender != owner) {
+            revert InvalidOwner(msg.sender);
+        }
         _;
     }
 
     modifier gotAllowance(address user) {
-        require(hasAllowance(user), "This address has no allowance");
+        if (!hasAllowance(user)) {
+            revert HasNoAllowance(user);
+        }
         _;
     }
 
     modifier canDepositTokens(address depositor) {
-        require(
-            canDeposit(depositor),
-            "This address is not allowed to deposit tokens"
-        );
+        if (!canDeposit(depositor)) {
+            revert NotAllowedToDeposit(depositor);
+        }
         _;
     }
 
     /* END OF MODIFIERS */
+
+    /* GLB VARS */
 
     constructor() payable {
         totalBalance = msg.value;
@@ -123,22 +100,26 @@ contract PayPool is ReentrancyGuard {
     }
 
     function approveDeposit(uint256 index) external isOwner {
-        require(index < depositHistory.length, "Invalid index");
+        if (index >= depositHistory.length) {
+            revert InvalidIndex();
+        }
+
         depositHistory[index].status = DepositStatus.Approved;
         emit DepositStatusUpdated(index, DepositStatus.Approved);
     }
 
     function rejectDeposit(uint256 index) external isOwner {
-        require(index < depositHistory.length, "Invalid index");
+        if (index >= depositHistory.length) {
+            revert InvalidIndex();
+        }
         depositHistory[index].status = DepositStatus.Rejected;
         emit DepositStatusUpdated(index, DepositStatus.Rejected);
     }
 
     function giveAllowance(uint amount, address user) external isOwner {
-        require(
-            totalBalance >= amount,
-            "Not enough tokens inside the pool to give allowance"
-        );
+        if (totalBalance < amount) {
+            revert InsufficientBalance();
+        }
         allowances[user] = amount;
         unchecked {
             totalBalance -= amount;
@@ -149,7 +130,11 @@ contract PayPool is ReentrancyGuard {
     function allowRetrieval() external gotAllowance(msg.sender) nonReentrant {
         uint amount = allowances[msg.sender];
         (bool success, ) = msg.sender.call{value: amount}("");
-        require(success, "Retrieval failed");
+
+        if (!success) {
+            revert RetrievalFailed();
+        }
+
         allowances[msg.sender] = 0;
         emit FundsRetrieved(msg.sender, amount);
     }
@@ -174,7 +159,11 @@ contract PayPool is ReentrancyGuard {
     function retrieveBalance() external isOwner nonReentrant {
         uint balance = totalBalance;
         (bool success, ) = owner.call{value: balance}("");
-        require(success, "Transfer failed");
+
+        if (!success) {
+            revert TransferFailed();
+        }
+
         totalBalance = 0;
         emit FundsRetrieved(owner, balance);
     }
